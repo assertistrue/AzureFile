@@ -34,6 +34,22 @@ var guid = require('node-uuid');
 var crypto = require('crypto');
 var storage = require('azure-storage');
 
+var shareName = "demofileshare";
+var directoryName = "demofiledirectory";
+
+console.log(`process.argv:${process.argv} length of ${process.argv.length}`);
+// console.log(`process.argv[0]:${process.argv[0]}`);
+// console.log(`process.argv[1]:${process.argv[1]}`);
+
+var opsMode = process.argv.length>= 2 ? process.argv[2] : undefined;
+var zipfile = process.argv.length>= 4 ? process.argv[3] : undefined;
+console.log(`opsMode:${opsMode}`);
+console.log(`zipfile:${zipfile}`);
+
+// process.argv.forEach(function (val, index, array) {
+//   console.log(index + ': ' + val);
+// });
+
 runFileSamples();
 
 function runFileSamples() {
@@ -48,11 +64,43 @@ function runFileSamples() {
   console.log('\nAzure Storage File Sample\n');
   
   var current = 0;
-  var scenarios = [
-    {
-      scenario: basicStorageFileOperations,
-      message: 'Basic File Sample Completed\n'
-    }];
+  var scenarios = [];
+
+  if (opsMode == '--upload')
+  {
+    console.log("upload");
+    scenarios = [
+        {
+          scenario: fileuploadOperations,
+          message: 'fileuploadOperations Completed\n'
+        }];
+  }
+
+  if (opsMode == '--list')
+  {
+    console.log("list");
+    scenarios = [
+        {
+          scenario: fileListOperations,
+          message: 'fileListOperations Completed\n'
+        }];
+  }
+
+  if (opsMode == '--download')
+  {
+    console.log("download");
+    scenarios = [
+        {
+          scenario: filedownloadOperations,
+          message: 'filedownloadOperations Completed\n'
+        }];
+  }
+
+  // var scenarios = [
+  //   {
+  //     scenario: basicStorageFileOperations,
+  //     message: 'Basic File Sample Completed\n'
+  //   }];
   
   var callback = function (error) {
     if (error) {
@@ -70,6 +118,84 @@ function runFileSamples() {
   scenarios[current].scenario(callback);
 }
 
+
+function fileuploadOperations(callback){
+  var fileService = storage.createFileService(readConfig().connectionString);
+
+  // var fileName = "demobfile-" + imageToUpload;
+  
+  console.log('fileuploadOperations started');
+  
+  // Create a share for organizing files within the storage account.
+  console.log('1. Creating file share');
+  fileService.createShareIfNotExists(shareName, function (error) {
+    if (error) {
+      callback(error);
+    } else {      
+      // Create a directory under the root directory
+      console.log('2. Creating a directory under the root directory');
+      fileService.createDirectoryIfNotExists(shareName, directoryName, function (error) {
+        if (error) {
+          callback(error);
+        } else {
+          // Create a directory under the just created directory
+          var nextDirectoryName = directoryName + '/' + directoryName + '01';         
+          fileService.createDirectoryIfNotExists(shareName, nextDirectoryName, function (error) {
+            if (error) {
+              callback(error);
+            } else {
+              // Uploading a local file to the directory created above
+              console.log('3. Uploading a file to directory');
+              fileService.createFileFromLocalFile(shareName, directoryName, zipfile, zipfile, function (error) {
+                if (error) {
+                  callback(error);
+                } else {
+                  console.log('fileuploadOperations end successfully');
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  });
+}
+
+function filedownloadOperations(callback){
+  var fileService = storage.createFileService(readConfig().connectionString);
+  console.log('filedownloadOperations started');
+
+  fileService.getFileToLocalFile(shareName, directoryName, zipfile, './download/' + zipfile, function (error) {
+    if (error) {
+      callback(error);
+    } else {
+      console.log("filedownloadOperations completed successfully");
+    }
+  });  
+}
+
+function fileListOperations(callback){
+  var fileService = storage.createFileService(readConfig().connectionString);
+  
+  console.log('fileListOperations started');
+  // List all files/directories under the root directory
+  console.log('4. List files/directories in root directory');
+  listFilesAndDirectories(fileService, shareName, directoryName, null, null, function (error, results) {
+    if (error) {
+      callback(error);
+    } else {
+      for (var i = 0; i < results.files.length; i++) {
+        console.log(util.format('   - %s (type: file)'), results.files[i].name);
+      }
+      for (var j = 0; j < results.directories.length; j++) {
+        console.log(util.format('   - %s (type: directory)'), results.directories[j].name);
+      }
+      console.log('fileListOperations completed successfully');
+    }
+  });
+}
+      
+
 /**
 * File basics.
 * @ignore
@@ -82,8 +208,8 @@ function basicStorageFileOperations(callback) {
   var fileService = storage.createFileService(readConfig().connectionString);
 
   var imageToUpload = "HelloWorld.png";
-  var shareName = "demofileshare-" + guid.v1();
-  var directoryName = "demofiledirectory";
+  // var shareName = "demofileshare";
+  // var directoryName = "demofiledirectory";
   var fileName = "demobfile-" + imageToUpload;
   
   console.log('Basic File Sample');
@@ -188,6 +314,8 @@ function listFilesAndDirectories(fileService, share, directory, token, options, 
   var items = { files: [], directories: []};
   
   fileService.listFilesAndDirectoriesSegmented(share, directory, token, options, function(error, result) {
+    console.log(`error:${error}`);
+    console.log(`result:${result}`);
     items.files.push.apply(items.files, result.entries.files);
     items.directories.push.apply(items.directories, result.entries.directories);
 
